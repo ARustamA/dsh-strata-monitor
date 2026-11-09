@@ -6,6 +6,8 @@ A pill next to the message composer shows the model's state at a glance. Hover i
 
 ![plugin icon](assets/icon-180.png)
 
+![the panel and its tooltip](assets/screenshot-tooltip.png)
+
 ## What it shows
 
 | Field | Read from |
