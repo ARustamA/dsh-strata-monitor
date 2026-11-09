@@ -20,10 +20,16 @@ window.__ModuleLoader__.load({
             gap: '6px',
             fontSize: '12px',
             lineHeight: 1.4,
-            opacity: 0.85,
             whiteSpace: 'nowrap',
             position: 'relative',
         };
+
+        /**
+         * The dimming belongs to the readable parts only. An opacity on the
+         * container would fade the whole subtree — including the tooltip's
+         * surface — and the page would show through it.
+         */
+        const DIMMED = { opacity: 0.85 };
 
         /**
          * The tooltip is a real element of the page, not the browser's native
@@ -135,8 +141,8 @@ window.__ModuleLoader__.load({
                 onMouseLeave: () => setHovered(false),
                 style: CONTAINER,
             }, [
-                h('span', { key: 'dot', style: { ...DOT, background: dotColor(state) } }),
-                h('span', { key: 'name' }, 'Strata'),
+                h('span', { key: 'dot', style: { ...DOT, ...DIMMED, background: dotColor(state) } }),
+                h('span', { key: 'name', style: DIMMED }, 'Strata'),
                 h('span', { key: 'value', style: { opacity: 0.75 } }, label),
                 hovered
                     ? h('span', { key: 'tip', role: 'tooltip', style: TOOLTIP }, describe(data))

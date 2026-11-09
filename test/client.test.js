@@ -228,6 +228,16 @@ test('the tooltip is drawn as a floating box that cannot steal the pointer', asy
     assert.ok(first.props.style.position, 'the panel must be the positioning anchor');
 });
 
+test('the panel must not dim the tooltip together with itself', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+
+    assert.equal(first.props.style.opacity, undefined, 'the panel must not dim its whole subtree');
+    assert.equal(first.props.children[0].props.style.opacity, 0.85, 'the dot keeps the dimming');
+    assert.equal(first.props.children[1].props.style.opacity, 0.85, 'the name keeps the dimming');
+    assert.equal(first.props.children[2].props.style.opacity, 0.75, 'the value keeps its own dimming');
+});
+
 test('the tooltip opens to the left, so it cannot add a scrollbar', async (t) => {
     const panel = mount(t);
     const first = await panel.answer(payload(70));
