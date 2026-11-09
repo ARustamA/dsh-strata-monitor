@@ -35,15 +35,18 @@ window.__ModuleLoader__.load({
         const TOOLTIP = {
             position: 'absolute',
             bottom: 'calc(100% + 8px)',
-            left: 0,
+            // open to the left of the panel: a box that grows to the right
+            // would reach past the window and add a horizontal scrollbar
+            right: '100%',
+            marginRight: '8px',
             zIndex: 100,
             pointerEvents: 'none',
             padding: '8px 10px',
             borderRadius: '6px',
-            background: 'var(--dsw-specific-menu, rgba(23, 24, 28, 0.97))',
-            color: 'var(--dsw-alias-label-primary, #f3f4f6)',
-            border: '1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.12))',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.28)',
+            background: 'var(--dsw-specific-input-major, #2c2c2e)',
+            color: 'var(--dsw-alias-label-primary, #f9fafb)',
+            border: '1px solid var(--dsw-alias-border-l2, #3a3a3c)',
+            boxShadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(0, 0, 0, 0.28))',
             fontFamily: 'var(--dsw-font-family, monospace)',
             fontSize: '12px',
             lineHeight: 1.5,
@@ -82,6 +85,8 @@ window.__ModuleLoader__.load({
                 lines.push(`tokens: ${data.generated} generated, ${data.prompt_tokens ?? '?'} in prompt, ${data.queued} queued`);
             if (data.vram_free_mib !== null)
                 lines.push(`VRAM free: ${data.vram_free_mib} MiB, arena ${data.arena_mib ?? '?'} MiB, expert cache ${data.expert_cache_mib ?? '?'} MiB`);
+            if (data.gpu_temp_c !== null || data.cpu_temp_c !== null)
+                lines.push(`temperatures: GPU ${data.gpu_temp_c ?? '?'} °C, CPU ${data.cpu_temp_c ?? '?'} °C`);
             const last = data.last_request;
             if (last !== null) {
                 lines.push(`last request: ${last.duration_s ?? '?'} s, ${last.prompt_tokens ?? '?'} prompt tokens, ${last.output_tokens ?? '?'} out, ${last.decode_tok_s ?? '?'} tok/s decode, cache hit ${last.hit_rate === null ? '?' : `${Math.round(last.hit_rate * 100)}%`}`);

@@ -160,6 +160,8 @@ const payload = (tokS) => ({
     vram_free_mib: 1457,
     arena_mib: 47962,
     expert_cache_mib: 6978,
+    gpu_temp_c: 62,
+    cpu_temp_c: 56.8,
     last_request: null,
 });
 
@@ -224,4 +226,39 @@ test('the tooltip is drawn as a floating box that cannot steal the pointer', asy
     assert.equal(tip.props.style.pointerEvents, 'none', 'the tooltip must not intercept the pointer');
     assert.equal(tip.props.style.whiteSpace, 'pre-wrap', 'the tooltip must keep its line breaks and wrap long ones');
     assert.ok(first.props.style.position, 'the panel must be the positioning anchor');
+});
+
+test('the tooltip opens to the left, so it cannot add a scrollbar', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+    first.props.onMouseEnter();
+    const hovered = panel.renderer.render();
+    const tip = tooltipOf(hovered);
+
+    assert.equal(tip.props.style.right, '100%', 'the tooltip must open to the left of the panel');
+    assert.equal(tip.props.style.left, undefined, 'the tooltip must not be anchored to the left edge');
+});
+
+test('the tooltip is opaque', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+    first.props.onMouseEnter();
+    const hovered = panel.renderer.render();
+    const tip = tooltipOf(hovered);
+    const background = tip.props.style.background;
+
+    assert.ok(!/rgba\([^)]*,\s*0?\.\d+\)/.test(background), 'the tooltip background must not be translucent');
+    assert.ok(!background.includes('--dsw-specific-menu'), 'the tooltip must not use the translucent menu surface');
+    assert.match(background, /#[0-9a-f]{6}/i, 'the fallback color must be a solid one');
+});
+
+test('the tooltip shows the temperatures', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+    first.props.onMouseEnter();
+    const hovered = panel.renderer.render();
+    const tip = tooltipOf(hovered);
+
+    assert.match(String(tip.props.children), /GPU 62/, 'the GPU temperature must be shown');
+    assert.match(String(tip.props.children), /CPU 56\.8/, 'the CPU temperature must be shown');
 });

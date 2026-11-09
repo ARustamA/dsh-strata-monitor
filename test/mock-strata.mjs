@@ -88,6 +88,17 @@ const metrics = {
             drafts_accepted: 402,
         },
     ],
+    hardware: {
+        gpu_util: 99,
+        gpu_mem_used: 15125450752,
+        gpu_mem_total: 17171480576,
+        gpu_temp: 62,
+        gpu_power: 193.096,
+        gpu_power_limit: 320.0,
+        cpu: 56.8,
+        ram_used: 62215053312,
+        ram_total: 67845529600,
+    },
 };
 
 function send(response, body) {

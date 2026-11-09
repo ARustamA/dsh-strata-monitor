@@ -85,3 +85,18 @@ test('the live block wins over the status block for the token rate', () => {
     const summary = buildSummary(status, { ...metrics, live: { tok_s: 12.5 } });
     assert.equal(summary.tok_s, 12.5);
 });
+
+test('the hardware temperatures reach the summary', () => {
+    const summary = buildSummary(status, {
+        ...metrics,
+        hardware: { gpu_temp: 62, cpu: 56.8 },
+    });
+    assert.equal(summary.gpu_temp_c, 62);
+    assert.equal(summary.cpu_temp_c, 56.8);
+});
+
+test('a missing hardware block leaves the temperatures unknown', () => {
+    const summary = buildSummary(status, metrics);
+    assert.equal(summary.gpu_temp_c, null);
+    assert.equal(summary.cpu_temp_c, null);
+});
