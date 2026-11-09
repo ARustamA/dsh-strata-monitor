@@ -168,6 +168,12 @@ function labelOf(element) {
     return String(element.props.children[2].props.children);
 }
 
+/** The tooltip element, when it is open. */
+function tooltipOf(element) {
+    const children = element?.props?.children ?? [];
+    return children.find?.((child) => child?.props?.role === 'tooltip') ?? null;
+}
+
 test('the panel refreshes every five seconds', (t) => {
     const panel = mount(t);
     assert.equal(panel.timers.length, 1, 'the panel must schedule exactly one poll timer');
@@ -179,27 +185,43 @@ test('the panel polls the host route', (t) => {
     assert.deepEqual(panel.requests, ['/strata/monitor']);
 });
 
-test('the tooltip holds still while the pointer rests on the panel', async (t) => {
+test('the tooltip is an element of the page, not the browser title bubble', async (t) => {
     const panel = mount(t);
 
     const first = await panel.answer(payload(70));
-    const frozen = first.props.title;
-    assert.match(frozen, /70/);
+    assert.equal(tooltipOf(first), null, 'the tooltip is closed before the pointer arrives');
+    assert.equal(first.props.title, undefined, 'the native title bubble must not be used');
 
-    // the pointer arrives: the tooltip takes a snapshot of the current numbers
+    // the pointer arrives: the tooltip opens as a real element
     first.props.onMouseEnter();
     const hovered = panel.renderer.render();
-    assert.equal(hovered.props.title, frozen);
+    const tip = tooltipOf(hovered);
+    assert.ok(tip, 'hovering must open the tooltip');
+    assert.match(String(tip.props.children), /70/);
 
-    // the next poll brings new numbers — the tooltip must not change under the pointer
+    // the next poll brings new numbers — the tooltip stays open and updates
     panel.poll();
     const refreshed = await panel.answer(payload(91));
-    assert.equal(refreshed.props.title, frozen, 'the tooltip must hold its text while hovered');
+    const tip2 = tooltipOf(refreshed);
+    assert.ok(tip2, 'the tooltip must stay open while the numbers refresh');
+    assert.match(String(tip2.props.children), /91/);
     assert.match(labelOf(refreshed), /91/, 'the visible value still updates while hovered');
 
-    // the pointer leaves: the tooltip goes back to live numbers
+    // the pointer leaves: the tooltip closes
     refreshed.props.onMouseLeave();
     const left = panel.renderer.render();
-    assert.notEqual(left.props.title, frozen);
-    assert.match(left.props.title, /91/);
+    assert.equal(tooltipOf(left), null);
+});
+
+test('the tooltip is drawn as a floating box that cannot steal the pointer', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+    first.props.onMouseEnter();
+    const hovered = panel.renderer.render();
+    const tip = tooltipOf(hovered);
+
+    assert.equal(tip.props.style.position, 'absolute', 'the tooltip must float above the panel');
+    assert.equal(tip.props.style.pointerEvents, 'none', 'the tooltip must not intercept the pointer');
+    assert.equal(tip.props.style.whiteSpace, 'pre-wrap', 'the tooltip must keep its line breaks and wrap long ones');
+    assert.ok(first.props.style.position, 'the panel must be the positioning anchor');
 });

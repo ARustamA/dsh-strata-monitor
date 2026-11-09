@@ -22,6 +22,39 @@ window.__ModuleLoader__.load({
             lineHeight: 1.4,
             opacity: 0.85,
             whiteSpace: 'nowrap',
+            position: 'relative',
+        };
+
+        /**
+         * The tooltip is a real element of the page, not the browser's native
+         * `title` bubble: a native bubble is drawn by the browser itself, so it
+         * vanishes the moment another program takes over the screen — exactly
+         * what happens when a screenshot is cut out with the snipping tool.
+         * As a DOM element it belongs to the page and is captured with it.
+         */
+        const TOOLTIP = {
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: 0,
+            zIndex: 100,
+            pointerEvents: 'none',
+            padding: '8px 10px',
+            borderRadius: '6px',
+            background: 'var(--dsw-specific-menu, rgba(23, 24, 28, 0.97))',
+            color: 'var(--dsw-alias-label-primary, #f3f4f6)',
+            border: '1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.12))',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.28)',
+            fontFamily: 'var(--dsw-font-family, monospace)',
+            fontSize: '12px',
+            lineHeight: 1.5,
+            textAlign: 'left',
+            whiteSpace: 'pre-wrap',
+            // a fixed width: an absolutely positioned box shrinks to fit its
+            // content, and the long "last request" line would otherwise
+            // stretch it past the edge of the window
+            width: '340px',
+            maxWidth: 'calc(100vw - 32px)',
+            opacity: 1,
         };
 
         const DOT = { width: '8px', height: '8px', borderRadius: '50%', flex: 'none' };
@@ -59,7 +92,6 @@ window.__ModuleLoader__.load({
         function StrataPill() {
             const [data, setData] = useState(null);
             const [hovered, setHovered] = useState(false);
-            const [tip, setTip] = useState(null);
 
             useEffect(() => {
                 let stopped = false;
@@ -91,29 +123,19 @@ window.__ModuleLoader__.load({
                 ? `${data.tok_s ?? 0} t/s`
                 : state === 'idle' ? 'idle' : 'offline';
 
-            // The tooltip is a snapshot: a browser closes it as soon as the
-            // `title` attribute changes, so a refreshing panel would make it
-            // vanish every poll. While the pointer rests on the panel the
-            // text is held still, so it can be read — and screenshotted.
-            const live = describe(data);
-            const title = hovered ? (tip ?? live) : live;
-
             return h('span', {
                 'data-strata-monitor': 'true',
-                title,
-                onMouseEnter: () => {
-                    setTip(live);
-                    setHovered(true);
-                },
-                onMouseLeave: () => {
-                    setHovered(false);
-                    setTip(null);
-                },
+                'aria-label': describe(data),
+                onMouseEnter: () => setHovered(true),
+                onMouseLeave: () => setHovered(false),
                 style: CONTAINER,
             }, [
                 h('span', { key: 'dot', style: { ...DOT, background: dotColor(state) } }),
                 h('span', { key: 'name' }, 'Strata'),
                 h('span', { key: 'value', style: { opacity: 0.75 } }, label),
+                hovered
+                    ? h('span', { key: 'tip', role: 'tooltip', style: TOOLTIP }, describe(data))
+                    : null,
             ]);
         }
 
