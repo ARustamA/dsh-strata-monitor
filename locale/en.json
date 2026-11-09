@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Strata Monitor",
+    "description": "Shows the live state of the local Strata model server next to the message composer."
+  }
+}

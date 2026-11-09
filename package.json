@@ -1,0 +1,66 @@
+{
+  "name": "dsh-strata-monitor",
+  "version": "0.1.0",
+  "description": "Live monitor of the local Strata model server inside the DeepSeek Harness GUI: state, token rate, VRAM and last request next to the message composer.",
+  "author": {
+    "name": "ARustamA",
+    "url": "https://github.com/ARustamA"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ARustamA/dsh-strata-monitor.git"
+  },
+  "homepage": "https://github.com/ARustamA/dsh-strata-monitor#readme",
+  "bugs": {
+    "url": "https://github.com/ARustamA/dsh-strata-monitor/issues"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "strata",
+    "monitor"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19",
+    "dsh": ">=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-rc.1 <0.3.0-0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-ui-conversation": "*",
+    "@deepseek-ai/dsh-host-webserver": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}
