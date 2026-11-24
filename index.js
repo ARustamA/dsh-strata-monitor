@@ -11,16 +11,43 @@ export const name = 'dsh-strata-monitor';
  */
 export const inject = ['webServer'];
 
-/** Strata's own address; the DSH profile points its Strata provider here too. */
-const STRATA_URL = (process.env.STRATA_URL ?? 'http://127.0.0.1:8080').replace(/\/+$/, '');
+/**
+ * The Strata the plugin falls back to when the profile configures no usable
+ * server: the local instance, at the address the DSH profile points its
+ * Strata provider at.
+ */
+const DEFAULT_URL = (process.env.STRATA_URL ?? 'http://127.0.0.1:8080').replace(/\/+$/, '');
 
 /** A stalled Strata must not stall the panel: give up after this long. */
 const TIMEOUT_MS = 3000;
 
-/** Read one JSON endpoint of Strata. */
-async function readJson(path) {
-    const url = `${STRATA_URL}${path}`;
-    const response = await fetch(url, {
+/**
+ * The configured Strata instances: `config.servers`, a list of
+ * `{ name, url }` entries coming from the profile's patch layer
+ * (cordis.patch.yml). The entries are checked where they enter and a broken
+ * one is skipped; when nothing usable remains, the single default server
+ * stands in. The first entry answers requests that name no server.
+ */
+function resolveServers(config) {
+    const entries = Array.isArray(config?.servers) ? config.servers : [];
+    const servers = [];
+    for (const entry of entries) {
+        const name = typeof entry?.name === 'string' ? entry.name.trim() : '';
+        const url = typeof entry?.url === 'string' ? entry.url.trim() : '';
+        if (name === '' || !/^https?:\/\//i.test(url))
+            continue;
+        if (servers.some((server) => server.name === name))
+            continue;
+        servers.push({ name, url: url.replace(/\/+$/, '') });
+    }
+    if (servers.length === 0)
+        servers.push({ name: 'local', url: DEFAULT_URL });
+    return servers;
+}
+
+/** Read one JSON endpoint of the given Strata. */
+async function readJson(base, path) {
+    const response = await fetch(`${base}${path}`, {
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: { accept: 'application/json' },
     });
@@ -53,9 +80,16 @@ function sameOrigin(request) {
 /**
  * Host half of the bundle: one read-only route that carries Strata's live
  * numbers to the browser. The panel talks to this route instead of Strata
- * itself, so the browser never needs a cross-origin grant from Strata.
+ * itself, so the browser never needs a cross-origin grant from Strata —
+ * which holds for a remote Strata exactly as for a local one.
+ *
+ * `config.servers` names the instances the panel can reach; `?server=<name>`
+ * picks one, and every payload carries the answered server and the full list
+ * so the panel can render its switch and heal a stale choice.
  */
-export function apply(ctx) {
+export function apply(ctx, config) {
+    const servers = resolveServers(config);
+    const names = servers.map((server) => server.name);
     ctx.effect(() => ctx.webServer.register({
         kind: 'exact',
         path: '/strata/monitor',
@@ -68,15 +102,18 @@ export function apply(ctx) {
                 sendJson(response, 403, { error: 'cross-origin request refused' });
                 return;
             }
+            const wanted = new URLSearchParams((request.url ?? '').split('?')[1] ?? '').get('server');
+            const server = servers.find((entry) => entry.name === wanted) ?? servers[0];
             try {
                 const [status, metrics] = await Promise.all([
-                    readJson('/status'),
-                    readJson('/metrics'),
+                    readJson(server.url, '/status'),
+                    readJson(server.url, '/metrics'),
                 ]);
-                sendJson(response, 200, buildSummary(status, metrics));
+                sendJson(response, 200, { ...buildSummary(status, metrics), server: server.name, servers: names });
             }
             catch (error) {
-                sendJson(response, 200, buildOffline(error instanceof Error ? error.message : String(error)));
+                const offline = buildOffline(error instanceof Error ? error.message : String(error));
+                sendJson(response, 200, { ...offline, server: server.name, servers: names });
             }
         },
     }), 'strata-monitor: /strata/monitor');

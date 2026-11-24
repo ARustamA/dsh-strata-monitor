@@ -12,6 +12,7 @@
  * uses: declare the dependency (`inject`), so the loader applies the plugin
  * once the service exists, and claim the route through the injected service.
  */
+import { createServer } from 'node:http';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -39,7 +40,7 @@ function makeWebServer() {
  * in `inject` is applied once that service exists, a plugin that declares
  * nothing is applied straight away — while the service is still starting.
  */
-async function load(plugin) {
+async function load(plugin, config) {
     const services = {};
     const effects = [];
     const ctx = {
@@ -59,7 +60,7 @@ async function load(plugin) {
 
     const deps = Array.isArray(plugin.inject) ? plugin.inject : [];
     if (deps.length === 0) {
-        plugin.apply(ctx);
+        plugin.apply(ctx, config);
     }
     else {
         // the loader waits for the declared services, then applies the plugin
@@ -69,13 +70,13 @@ async function load(plugin) {
                 resolve();
             }, 0);
         })));
-        plugin.apply(ctx);
+        plugin.apply(ctx, config);
     }
     return { ctx, services, effects };
 }
 
 /** One request/response exchange for the route handler. */
-function makeExchange(method = 'GET', headers = {}) {
+function makeExchange(method = 'GET', headers = {}, url = '/strata/monitor') {
     const response = {
         statusCode: 200,
         headers: {},
@@ -89,7 +90,35 @@ function makeExchange(method = 'GET', headers = {}) {
             this.body = body;
         },
     };
-    return { request: { method, headers }, response };
+    return { request: { method, headers, url }, response };
+}
+
+/**
+ * A miniature Strata answering `/status` and `/metrics` with a distinct model
+ * name, so a test can tell which server the route actually talked to.
+ */
+async function startStrata(t, model) {
+    const server = createServer((request, response) => {
+        const path = (request.url ?? '/').split('?')[0];
+        const body = path === '/status'
+            ? { busy: false, queued: 0 }
+            : path === '/metrics'
+                ? { engine: { model, version: '0.1.60' }, live: { state: 'idle', queued: 0 } }
+                : null;
+        if (body === null) {
+            response.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+            response.end(JSON.stringify({ error: 'not found' }));
+            return;
+        }
+        response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify(body));
+    });
+    return await new Promise((resolve) => {
+        server.listen(0, '127.0.0.1', () => {
+            t.after(() => server.close());
+            resolve(`http://127.0.0.1:${server.address().port}`);
+        });
+    });
 }
 
 test('the plugin claims the route the GUI polls', async () => {
@@ -122,6 +151,9 @@ test('the route answers a GET with the panel payload', async () => {
     const payload = JSON.parse(response.body);
     assert.equal(payload.ok, false);
     assert.equal(payload.state, 'offline');
+    // without any configured servers the plugin keeps its single default one
+    assert.equal(payload.server, 'local');
+    assert.deepEqual(payload.servers, ['local']);
 });
 
 test('the route refuses anything but GET and HEAD', async () => {
@@ -132,4 +164,56 @@ test('the route refuses anything but GET and HEAD', async () => {
     await route.handler(request, response);
 
     assert.equal(response.statusCode, 405);
+});
+
+test('the route reads the server named in the query, the first one by default', async (t) => {
+    const local = await startStrata(t, 'local-model');
+    // a trailing slash in the configured url must not produce a doubled slash
+    const remote = await startStrata(t, 'remote-model');
+    const { services } = await load({ name, inject, apply }, {
+        servers: [{ name: 'local', url: local }, { name: 'server', url: `${remote}/` }],
+    });
+    const route = services.webServer.routes.get('/strata/monitor');
+
+    const named = makeExchange('GET', {}, '/strata/monitor?server=server');
+    await route.handler(named.request, named.response);
+    const namedPayload = JSON.parse(named.response.body);
+    assert.equal(namedPayload.ok, true, 'the named server must be reachable');
+    assert.equal(namedPayload.model, 'remote-model', 'the answer must come from the named server');
+    assert.equal(namedPayload.server, 'server', 'the payload names the answered server');
+    assert.deepEqual(namedPayload.servers, ['local', 'server'], 'the payload lists every server');
+
+    const bare = makeExchange('GET');
+    await route.handler(bare.request, bare.response);
+    assert.equal(JSON.parse(bare.response.body).model, 'local-model', 'without a query the first server answers');
+});
+
+test('a request for a server that is not configured falls back to the default one', async (t) => {
+    const local = await startStrata(t, 'local-model');
+    const { services } = await load({ name, inject, apply }, {
+        servers: [{ name: 'local', url: local }],
+    });
+    const route = services.webServer.routes.get('/strata/monitor');
+
+    const { request, response } = makeExchange('GET', {}, '/strata/monitor?server=gone');
+    await route.handler(request, response);
+
+    const payload = JSON.parse(response.body);
+    assert.equal(payload.model, 'local-model', 'the default server answers instead');
+    assert.equal(payload.server, 'local', 'the payload names the server that actually answered');
+});
+
+test('a servers list the plugin cannot use falls back to the default server', async () => {
+    const { services } = await load({ name, inject, apply }, {
+        servers: [{ name: 'broken' }, { url: 'not a url' }, { name: '', url: 'http://127.0.0.1:1' }],
+    });
+    const route = services.webServer.routes.get('/strata/monitor');
+
+    const { request, response } = makeExchange('GET');
+    await route.handler(request, response);
+
+    const payload = JSON.parse(response.body);
+    assert.equal(payload.state, 'offline', 'the default server (an unused port) is offline');
+    assert.equal(payload.server, 'local');
+    assert.deepEqual(payload.servers, ['local']);
 });

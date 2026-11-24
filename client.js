@@ -14,6 +14,9 @@ window.__ModuleLoader__.load({
         /** How often the panel asks the host route for fresh numbers. */
         const POLL_MS = 5000;
 
+        /** Where the browser remembers which Strata the reader last chose. */
+        const SERVER_KEY = 'dsh-strata-monitor.server';
+
         const CONTAINER = {
             display: 'inline-flex',
             alignItems: 'center',
@@ -30,6 +33,23 @@ window.__ModuleLoader__.load({
          * surface — and the page would show through it.
          */
         const DIMMED = { opacity: 0.85 };
+
+        /**
+         * The server switch, rendered inside the pill only when the profile
+         * configures more than one Strata. Clicking it cycles to the next one.
+         */
+        const SERVER_BUTTON = {
+            ...DIMMED,
+            font: 'inherit',
+            fontSize: 'inherit',
+            lineHeight: 1.2,
+            color: 'inherit',
+            background: 'transparent',
+            border: '1px solid var(--dsw-alias-border-l2, #3a3a3c)',
+            borderRadius: '4px',
+            padding: '0 5px',
+            cursor: 'pointer',
+        };
 
         /**
          * The tooltip is a real element of the page, not the browser's native
@@ -103,15 +123,33 @@ window.__ModuleLoader__.load({
         function StrataPill() {
             const [data, setData] = useState(null);
             const [hovered, setHovered] = useState(false);
+            const [server, setServer] = useState(() => localStorage.getItem(SERVER_KEY));
+
+            // one place writes the choice, so the pill and the healing below
+            // cannot drift apart
+            const choose = (next) => {
+                setServer(next);
+                localStorage.setItem(SERVER_KEY, next);
+            };
 
             useEffect(() => {
                 let stopped = false;
+                const path = server === null || server === ''
+                    ? '/strata/monitor'
+                    : `/strata/monitor?server=${encodeURIComponent(server)}`;
                 const load = () => {
-                    fetch('/strata/monitor', { cache: 'no-store' })
+                    fetch(path, { cache: 'no-store' })
                         .then((response) => response.json())
                         .then((payload) => {
-                            if (!stopped)
-                                setData(payload);
+                            if (stopped)
+                                return;
+                            setData(payload);
+                            // a remembered server may have left the profile's
+                            // configuration; the host answered with one that
+                            // is there, so the pill heals its own choice
+                            const known = Array.isArray(payload?.servers) ? payload.servers : null;
+                            if (server !== null && known !== null && !known.includes(server) && typeof payload?.server === 'string')
+                                choose(payload.server);
                         })
                         .catch((error) => {
                             if (!stopped)
@@ -124,7 +162,7 @@ window.__ModuleLoader__.load({
                     stopped = true;
                     clearInterval(timer);
                 };
-            }, []);
+            }, [server]);
 
             if (data === null)
                 return null;
@@ -133,6 +171,26 @@ window.__ModuleLoader__.load({
             const label = state === 'busy'
                 ? `${data.tok_s ?? 0} t/s`
                 : state === 'idle' ? 'idle' : 'offline';
+            const servers = Array.isArray(data.servers) ? data.servers : [];
+            const active = server ?? data.server ?? servers[0] ?? null;
+
+            const children = [
+                h('span', { key: 'dot', style: { ...DOT, ...DIMMED, background: dotColor(state) } }),
+                h('span', { key: 'name', style: DIMMED }, 'Strata'),
+                h('span', { key: 'value', style: { opacity: 0.75 } }, label),
+            ];
+            if (servers.length > 1) {
+                children.push(h('button', {
+                    key: 'server',
+                    type: 'button',
+                    'aria-label': 'Strata server',
+                    onClick: () => choose(servers[(servers.indexOf(active) + 1) % servers.length]),
+                    style: SERVER_BUTTON,
+                }, active));
+            }
+            if (hovered) {
+                children.push(h('span', { key: 'tip', role: 'tooltip', style: TOOLTIP }, describe(data)));
+            }
 
             return h('span', {
                 'data-strata-monitor': 'true',
@@ -140,14 +198,7 @@ window.__ModuleLoader__.load({
                 onMouseEnter: () => setHovered(true),
                 onMouseLeave: () => setHovered(false),
                 style: CONTAINER,
-            }, [
-                h('span', { key: 'dot', style: { ...DOT, ...DIMMED, background: dotColor(state) } }),
-                h('span', { key: 'name', style: DIMMED }, 'Strata'),
-                h('span', { key: 'value', style: { opacity: 0.75 } }, label),
-                hovered
-                    ? h('span', { key: 'tip', role: 'tooltip', style: TOOLTIP }, describe(data))
-                    : null,
-            ]);
+            }, children);
         }
 
         return {

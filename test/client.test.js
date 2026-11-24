@@ -105,14 +105,21 @@ async function flush() {
 
 /**
  * Mount the panel with a controllable fetch: the test decides what each poll
- * answers and when.
+ * answers and when. `saved` seeds the browser storage, as a previous visit
+ * would have left it.
  */
-function mount(t) {
+function mount(t, saved = {}) {
     const timers = [];
     const requests = [];
     const pending = [];
+    const store = new Map(Object.entries(saved));
     const realSetInterval = globalThis.setInterval;
     const realFetch = globalThis.fetch;
+    const realLocalStorage = globalThis.localStorage;
+    globalThis.localStorage = {
+        getItem: (key) => store.has(key) ? store.get(key) : null,
+        setItem: (key, value) => { store.set(key, String(value)); },
+    };
     globalThis.setInterval = (fn, delay) => {
         timers.push({ fn, delay });
         return { unref() {} };
@@ -124,6 +131,7 @@ function mount(t) {
     t.after(() => {
         globalThis.setInterval = realSetInterval;
         globalThis.fetch = realFetch;
+        globalThis.localStorage = realLocalStorage;
     });
 
     const renderer = createRenderer();
@@ -132,6 +140,7 @@ function mount(t) {
     return {
         timers,
         requests,
+        store,
         renderer,
         /** Answer the next poll with this payload and re-render. */
         async answer(payload) {
@@ -163,11 +172,18 @@ const payload = (tokS) => ({
     gpu_temp_c: 62,
     cpu_temp_c: 56.8,
     last_request: null,
+    server: 'local',
+    servers: ['local', 'server'],
 });
 
 /** The pill's visible label: the third child carries the value. */
 function labelOf(element) {
     return String(element.props.children[2].props.children);
+}
+
+/** The server switch, when the pill renders one. */
+function switchOf(element) {
+    return (element?.props?.children ?? []).find?.((child) => child?.type === 'button') ?? null;
 }
 
 /** The tooltip element, when it is open. */
@@ -185,6 +201,39 @@ test('the panel refreshes every five seconds', (t) => {
 test('the panel polls the host route', (t) => {
     const panel = mount(t);
     assert.deepEqual(panel.requests, ['/strata/monitor']);
+});
+
+test('the pill shows a server switch when more than one server is configured', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+
+    const button = switchOf(first);
+    assert.ok(button, 'the pill must offer the switch when two servers are configured');
+    assert.equal(String(button.props.children), 'local', 'the switch names the server that answered');
+});
+
+test('the switch cycles to the next server and asks the host for it', async (t) => {
+    const panel = mount(t);
+    const first = await panel.answer(payload(70));
+
+    switchOf(first).props.onClick();
+    panel.renderer.render();
+
+    assert.equal(panel.requests.at(-1), '/strata/monitor?server=server', 'the next poll must ask for the next server');
+    assert.equal(panel.store.get('dsh-strata-monitor.server'), 'server', 'the choice must outlive the page');
+});
+
+test('a remembered server is polled right away', (t) => {
+    const panel = mount(t, { 'dsh-strata-monitor.server': 'server' });
+    assert.deepEqual(panel.requests, ['/strata/monitor?server=server']);
+});
+
+test('a remembered server that no longer exists falls back to the server the host answered with', async (t) => {
+    const panel = mount(t, { 'dsh-strata-monitor.server': 'gone' });
+    await panel.answer(payload(70));
+
+    assert.equal(panel.requests.at(-1), '/strata/monitor?server=local', 'the panel must fall back to the answered server');
+    assert.equal(panel.store.get('dsh-strata-monitor.server'), 'local', 'the fallback must be remembered too');
 });
 
 test('the tooltip is an element of the page, not the browser title bubble', async (t) => {
