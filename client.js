@@ -14,8 +14,16 @@ window.__ModuleLoader__.load({
         /** How often the panel asks the host route for fresh numbers. */
         const POLL_MS = 5000;
 
-        /** Where the browser remembers which Strata the reader last chose. */
+        /**
+         * Where the browser remembers which Strata the reader chose. The key
+         * is per chat: two chats can watch two different Strata at the same
+         * time. A mount without a chat identity falls back to the shared key.
+         */
         const SERVER_KEY = 'dsh-strata-monitor.server';
+
+        function serverKey(sessionId) {
+            return sessionId ? `${SERVER_KEY}.${sessionId}` : SERVER_KEY;
+        }
 
         const CONTAINER = {
             display: 'inline-flex',
@@ -120,16 +128,21 @@ window.__ModuleLoader__.load({
             return lines.join('\n');
         }
 
-        function StrataPill() {
+        function StrataPill({ sessionId }) {
             const [data, setData] = useState(null);
             const [hovered, setHovered] = useState(false);
-            const [server, setServer] = useState(() => localStorage.getItem(SERVER_KEY));
+            // the storage is the one truth about the choice, read on every
+            // render: switching chats changes the key, and the poll below
+            // follows the key it was given
+            const [, setBump] = useState(0);
+            const key = serverKey(sessionId);
+            const server = localStorage.getItem(key);
 
             // one place writes the choice, so the pill and the healing below
             // cannot drift apart
             const choose = (next) => {
-                setServer(next);
-                localStorage.setItem(SERVER_KEY, next);
+                localStorage.setItem(key, next);
+                setBump((n) => n + 1);
             };
 
             useEffect(() => {
@@ -162,7 +175,7 @@ window.__ModuleLoader__.load({
                     stopped = true;
                     clearInterval(timer);
                 };
-            }, [server]);
+            }, [server, sessionId]);
 
             if (data === null)
                 return null;

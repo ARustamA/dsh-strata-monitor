@@ -63,13 +63,13 @@ function createRenderer() {
         useEffect(effect) {
             effects.push(effect);
         },
-        render() {
+        render(props = {}) {
             cursor = 0;
             effects = [];
             const previous = active;
             active = renderer;
             try {
-                const element = registered.Component();
+                const element = registered.Component(props);
                 for (const effect of effects) effect();
                 return element;
             }
@@ -108,7 +108,7 @@ async function flush() {
  * answers and when. `saved` seeds the browser storage, as a previous visit
  * would have left it.
  */
-function mount(t, saved = {}) {
+function mount(t, saved = {}, sessionId) {
     const timers = [];
     const requests = [];
     const pending = [];
@@ -135,7 +135,10 @@ function mount(t, saved = {}) {
     });
 
     const renderer = createRenderer();
-    renderer.render();
+    // the dock hands the pill its props on every render; the chat identity
+    // is one of them, and the test switches it the way the app would
+    const props = { sessionId };
+    renderer.render(props);
 
     return {
         timers,
@@ -146,7 +149,12 @@ function mount(t, saved = {}) {
         async answer(payload) {
             pending.shift()?.({ json: () => Promise.resolve(payload) });
             await flush();
-            return renderer.render();
+            return renderer.render(props);
+        },
+        /** Move the pill to another chat, as opening another session does. */
+        switchTo(next) {
+            props.sessionId = next;
+            return renderer.render(props);
         },
         /** Trigger the poll timer, as the browser would every five seconds. */
         poll() {
@@ -234,6 +242,25 @@ test('a remembered server that no longer exists falls back to the server the hos
 
     assert.equal(panel.requests.at(-1), '/strata/monitor?server=local', 'the panel must fall back to the answered server');
     assert.equal(panel.store.get('dsh-strata-monitor.server'), 'local', 'the fallback must be remembered too');
+});
+
+test('each chat keeps its own server choice', async (t) => {
+    const panel = mount(t, { 'dsh-strata-monitor.server.session-a': 'server' }, 'session-a');
+    assert.deepEqual(panel.requests, ['/strata/monitor?server=server'], 'a chat asks for the server it chose before');
+
+    // the pill moves to another chat: that chat has its own choice — none —
+    // so the host default answers, and the first chat keeps its own
+    panel.switchTo('session-b');
+    assert.equal(panel.requests.at(-1), '/strata/monitor', 'a chat without its own choice asks the host default');
+    assert.equal(panel.store.get('dsh-strata-monitor.server.session-a'), 'server', 'the other chat keeps its own choice');
+
+    // a choice made in this chat is stored under this chat only
+    const first = await panel.answer(payload(70));
+    switchOf(first).props.onClick();
+    panel.renderer.render({ sessionId: 'session-b' });
+    assert.equal(panel.requests.at(-1), '/strata/monitor?server=server', 'the next poll asks for the server chosen in this chat');
+    assert.equal(panel.store.get('dsh-strata-monitor.server.session-b'), 'server', 'the choice belongs to this chat');
+    assert.equal(panel.store.get('dsh-strata-monitor.server.session-a'), 'server', 'the other chat is untouched');
 });
 
 test('the tooltip is an element of the page, not the browser title bubble', async (t) => {
