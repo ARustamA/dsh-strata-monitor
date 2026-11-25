@@ -121,7 +121,7 @@ window.__ModuleLoader__.load({
                 lines.push(`VRAM free: ${data.vram_free_mib} MiB, arena ${data.arena_mib ?? '?'} MiB, expert cache ${data.expert_cache_mib ?? '?'} MiB`);
             if (data.gpu_temp_c !== null)
                 lines.push(`temperature: GPU ${data.gpu_temp_c} °C`);
-            if (data.cpu_pct !== null)
+            if (data.cpu_pct != null)
                 lines.push(`CPU busy: ${data.cpu_pct}%`);
             const last = data.last_request;
             if (last !== null) {

@@ -348,3 +348,16 @@ test('the tooltip shows the GPU temperature and the CPU busy share', async (t) =
     assert.match(String(tip.props.children), /GPU 62/, 'the GPU temperature must be shown');
     assert.match(String(tip.props.children), /CPU busy: 56\.8%/, 'the CPU busy share must be shown');
 });
+
+test('a payload without the CPU busy share hides the line', async (t) => {
+    const panel = mount(t);
+    const stale = { ...payload(70) };
+    delete stale.cpu_pct;
+    const first = await panel.answer(stale);
+    first.props.onMouseEnter();
+    const hovered = panel.renderer.render();
+    const tip = tooltipOf(hovered);
+
+    assert.doesNotMatch(String(tip.props.children), /CPU busy/, 'the line must be hidden, not blank');
+    assert.doesNotMatch(String(tip.props.children), /undefined/, 'no undefined may leak into the tooltip');
+});
