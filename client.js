@@ -119,8 +119,10 @@ window.__ModuleLoader__.load({
                 lines.push(`tokens: ${data.generated} generated, ${data.prompt_tokens ?? '?'} in prompt, ${data.queued} queued`);
             if (data.vram_free_mib !== null)
                 lines.push(`VRAM free: ${data.vram_free_mib} MiB, arena ${data.arena_mib ?? '?'} MiB, expert cache ${data.expert_cache_mib ?? '?'} MiB`);
-            if (data.gpu_temp_c !== null || data.cpu_temp_c !== null)
-                lines.push(`temperatures: GPU ${data.gpu_temp_c ?? '?'} °C, CPU ${data.cpu_temp_c ?? '?'} °C`);
+            if (data.gpu_temp_c !== null)
+                lines.push(`temperature: GPU ${data.gpu_temp_c} °C`);
+            if (data.cpu_pct !== null)
+                lines.push(`CPU busy: ${data.cpu_pct}%`);
             const last = data.last_request;
             if (last !== null) {
                 lines.push(`last request: ${last.duration_s ?? '?'} s, ${last.prompt_tokens ?? '?'} prompt tokens, ${last.output_tokens ?? '?'} out, ${last.decode_tok_s ?? '?'} tok/s decode, cache hit ${last.hit_rate === null ? '?' : `${Math.round(last.hit_rate * 100)}%`}`);

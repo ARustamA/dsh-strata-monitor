@@ -178,7 +178,7 @@ const payload = (tokS) => ({
     arena_mib: 47962,
     expert_cache_mib: 6978,
     gpu_temp_c: 62,
-    cpu_temp_c: 56.8,
+    cpu_pct: 56.8,
     last_request: null,
     server: 'local',
     servers: ['local', 'server'],
@@ -338,7 +338,7 @@ test('the tooltip is opaque', async (t) => {
     assert.match(background, /#[0-9a-f]{6}/i, 'the fallback color must be a solid one');
 });
 
-test('the tooltip shows the temperatures', async (t) => {
+test('the tooltip shows the GPU temperature and the CPU busy share', async (t) => {
     const panel = mount(t);
     const first = await panel.answer(payload(70));
     first.props.onMouseEnter();
@@ -346,5 +346,5 @@ test('the tooltip shows the temperatures', async (t) => {
     const tip = tooltipOf(hovered);
 
     assert.match(String(tip.props.children), /GPU 62/, 'the GPU temperature must be shown');
-    assert.match(String(tip.props.children), /CPU 56\.8/, 'the CPU temperature must be shown');
+    assert.match(String(tip.props.children), /CPU busy: 56\.8%/, 'the CPU busy share must be shown');
 });
